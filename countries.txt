@@ -1,0 +1,6 @@
+# Areas to include, one per line, using Geofabrik's names (see download.geofabrik.de).
+# Remove the # in front of a line to add that country. Each one adds a few minutes to the weekly build.
+europe/netherlands
+# europe/belgium
+# europe/germany
+# europe/united-kingdom
