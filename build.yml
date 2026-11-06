@@ -1,0 +1,67 @@
+name: Build app and place data
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 1'   # every Monday at 03:17 UTC
+  workflow_dispatch:        # adds a "Run workflow" button
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install osmium
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool
+
+      - name: Download and filter OpenStreetMap data
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          FILTER="nwr/amenity=drinking_water,water_point,toilets,parking nwr/man_made=water_tap nwr/emergency=defibrillator nwr/internet_access:fee=no,customers nwr/toilets=yes nwr/drinking_water:refill=yes"
+          AREAS=""
+          for area in $(grep -vE '^[[:space:]]*(#|$)' countries.txt); do
+            name=$(echo "$area" | tr '/' '_')
+            echo "Downloading $area"
+            curl -fsSL --retry 3 -o "work/$name.osm.pbf" "https://download.geofabrik.de/${area}-latest.osm.pbf"
+            osmium tags-filter "work/$name.osm.pbf" $FILTER -o "work/$name.f.pbf" -O
+            rm "work/$name.osm.pbf"
+            AREAS="${AREAS:+$AREAS,}$area"
+          done
+          osmium merge work/*.f.pbf -o work/all.pbf -O
+          osmium export work/all.pbf -f geojsonseq -a type,id,timestamp -o work/places.geojsonseq -O
+          echo "AREAS=$AREAS" >> "$GITHUB_ENV"
+
+      - name: Build site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          python3 scripts/build_data.py work/places.geojsonseq _site/data "$AREAS"
+          du -sh _site/data
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

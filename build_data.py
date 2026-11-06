@@ -18,10 +18,29 @@ KEEP = {
   'name','amenity','man_made','emergency','drinking_water','fee','access','opening_hours',
   'wheelchair','changing_table','bottle','capacity','maxstay','parking','indoor',
   'defibrillator:location','internet_access','internet_access:fee','unisex','male','female',
-  'check_date','survey:date','survey_date'
+  'check_date','survey:date','survey_date',
+  'gender_segregated','capacity:disabled','toilets:wheelchair','dog','drinking_water:dog',
+  'toilets','toilets:access','toilets:fee','toilets:opening_hours','toilets:changing_table','toilets:unisex',
+  'drinking_water:refill','drinking_water:fee','shop','railway','public_transport','tourism'
 }
 
+PUBLIC_HOSTS = {'library','townhall','community_centre','social_centre','arts_centre','place_of_worship'}
+
+def hosted(t):
+  return t.get('amenity') not in ('toilets','drinking_water','water_point') and t.get('man_made') != 'water_tap'
+
+def hidden_toilet(t):
+  # A toilet inside another place that anyone may use without buying something
+  if t.get('toilets') != 'yes' or not hosted(t): return False
+  acc = t.get('toilets:access', '').lower()
+  if acc in ('customers','private','no','permit'): return False
+  if acc in ('yes','permissive','public'): return True
+  return (t.get('amenity') in PUBLIC_HOSTS or t.get('shop') == 'mall' or t.get('railway') == 'station'
+          or t.get('public_transport') == 'station' or t.get('tourism') == 'museum')
+
 def wanted(t):
+  if hidden_toilet(t): return True
+  if t.get('drinking_water:refill') == 'yes' and hosted(t): return True
   a = t.get('amenity')
   if a in ('drinking_water','water_point','toilets','parking'): return True
   if t.get('man_made') == 'water_tap' and t.get('drinking_water') == 'yes': return True
